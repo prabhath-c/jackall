@@ -1,49 +1,48 @@
-import pandas as pd
 import matplotlib.pyplot as plt
-from pyiron_atomistics import Project
-import pyiron_potentialfit
 
-def get_pareto_front(x_axis_values, y_axis_values):
+def get_pareto_front(df, column_headers):
+    sorted_df = df.sort_values(by=column_headers[0], ascending=True).reset_index(drop=True)
 
-    df = pd.DataFrame({'x': x_axis_values.tolist(), 'y': y_axis_values.tolist()})
-    df = df.sort_values(by='x', ascending=True)
-
+    pareto_rows = [0]
     current_idx = 0
-    lowest_x = df.iloc[current_idx]['x']
-    y_lowest_x = df.iloc[current_idx]['y']
 
-    pareto_x = [lowest_x]
-    pareto_y = [y_lowest_x]
-
-    while(True):
+    while True:
         slope = 0
-        for i in range(current_idx+1, len(df['x'])):
-            if(df.iloc[i]['x'] != pareto_x[-1]):
-                temp_slope = (df.iloc[i]['y'] - pareto_y[-1])/(df.iloc[i]['x'] - pareto_x[-1])
-                if(temp_slope < slope):
+        found_better = False
+        next_idx = None
+        for i in range(current_idx + 1, len(sorted_df)):
+            if sorted_df.loc[i, column_headers[0]] != sorted_df.loc[pareto_rows[-1], column_headers[0]]:
+                temp_slope = ((sorted_df.loc[i, column_headers[1]] - sorted_df.loc[pareto_rows[-1], column_headers[1]]) /
+                              (sorted_df.loc[i, column_headers[0]] - sorted_df.loc[pareto_rows[-1], column_headers[0]]))
+                if temp_slope < slope:
                     slope = temp_slope
-                    next_x, next_y = df.iloc[i]['x'], df.iloc[i]['y']
                     next_idx = i
-        if(slope==0): break
-
+                    found_better = True
+        if not found_better:
+            break
+        pareto_rows.append(next_idx)
         current_idx = next_idx
 
-        pareto_x.append(next_x)
-        pareto_y.append(next_y)
+    pareto_df = sorted_df.loc[pareto_rows].reset_index(drop=True)
+    
+    return pareto_df
 
-    return pareto_x, pareto_y
-
-def plot_from_table(x_axis_values, y_axis_values, x_axis_label='X', y_axis_label='Y',
-                    marker_color='lightgreen', draw_pareto=False, show_figure=True):
+def plot_from_table(df, column_headers, axis_labels=['X', 'Y'],
+                    marker_color='lightgreen', draw_pareto=False, print_pareto=False, show_figure=True):
     
     fig, ax = plt.subplots()
-    ax.scatter(x_axis_values, y_axis_values, c=marker_color, s=10)
-    ax.set_xlabel(x_axis_label)
-    ax.set_ylabel(y_axis_label)
+    ax.scatter(df[column_headers[0]], df[column_headers[1]], c=marker_color, s=10)
+    ax.set_xlabel(axis_labels[0])
+    ax.set_ylabel(axis_labels[1])
     
     if draw_pareto==True:
-        pareto_x, pareto_y = get_pareto_front(x_axis_values, y_axis_values)
-        ax.plot(pareto_x, pareto_y, c='red', marker='^', markersize=5, linewidth=0.5)
+        column_headers.append('hashed_key')
+        pareto_df = get_pareto_front(df[column_headers], column_headers)
+        ax.plot(pareto_df[column_headers[0]], pareto_df[column_headers[1]], c='red', marker='^', markersize=5, linewidth=0.5)
+
+        if  print_pareto==True:
+            print("Pareto points:")
+            print(pareto_df)
 
     if show_figure==True:
         plt.show()
