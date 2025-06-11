@@ -4,4 +4,4 @@
 
 # jackall
 
-JackAll: A versatile Python toolkit for multitasking in computational materials science – smoothing workflows, plotting, filtering, and more.
+JackAll, derived from "jack-of-all-trades", is a versatile Python toolkit for multitasking in computational materials science – smoothing workflows, plotting, filtering, and more.
