@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 
 def get_pareto_front(df, column_headers):
     sorted_df = df.sort_values(by=column_headers[0], ascending=True).reset_index(drop=True)
@@ -44,9 +45,19 @@ def plot_from_table(df, column_headers, axis_labels=['X', 'Y'],
             print("Pareto points:")
             print(pareto_df)
 
+        final_pareto_df = pd.merge(
+                            pareto_df[['hashed_key']],
+                            df,
+                            on='hashed_key',
+                            how='left'
+        )
+
     if show_figure==True:
         plt.show()
     
     plt.close(fig)
 
-    return fig, ax
+    if draw_pareto==True:
+        return fig, ax, final_pareto_df
+    else:
+        return fig, ax

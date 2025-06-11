@@ -6,6 +6,8 @@ from pyiron_atomistics import Project
 import pyiron_potentialfit
 from itertools import combinations
 
+from jackall import filtering
+
 weighting_params_dict = {
         ## weights for the structures energies/forces are associated according to the distance to E_min:
         ## convex hull ( energy: convex_hull) or minimal energy per atom (energy: cohesive)
@@ -32,7 +34,7 @@ weighting_params_dict = {
         "seed": 6169
 }
 
-def setup_job(project, df_All, atomic_symbols, hashed_key, 
+def setup_job(project, df_All, atomic_symbols, master_order, hashed_key, 
               hyperparameters={'training_ratio':0.7, 
                                'cut_rad':7.0, 
                                'nradmax_by_orders':[15, 3, 2, 1], 
@@ -46,7 +48,7 @@ def setup_job(project, df_All, atomic_symbols, hashed_key,
     lmax_by_orders = hyperparameters['lmax_by_orders']
     
     # Filter data as required
-    filtered_df = filter_df(df_All, atomic_symbols, master_order, cumulative_atoms)
+    filtered_df = filtering.filter_df(df_All, atomic_symbols, master_order, cumulative_atoms)
     
     # Create training and testing set
     training_set = filtered_df.sample(frac=training_ratio, random_state=6919)
