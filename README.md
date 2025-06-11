@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/55f5606f-cbcb-4488-b500-89fc5946525e" alt="jackall_logo_darkmode" width="120" />
+  <img src="https://github.com/user-attachments/assets/fa568d94-4a50-490b-876b-ab084de054ed" alt="jackall_logo_darkmode" width="120" />
 </p>
 
 # jackall
