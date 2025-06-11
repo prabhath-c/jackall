@@ -79,16 +79,6 @@ def setup_job(project, df_All, atomic_symbols, hashed_key,
 
     return job
 
-def run_slurm(job, queue_name='cmti', num_cores=20, run_time=3600, run=False):
-    job.server.queue = queue_name
-    job.server.cores = num_cores
-    job.server.run_time = run_time
-
-    if run==True: 
-        job.run()
-
-    return job
-
 def hash_hyperparams(hyperparams_dict):
 
     sorted_params = {k: hyperparams_dict[k] for k in sorted(hyperparams_dict)}
