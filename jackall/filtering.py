@@ -1,38 +1,55 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-from pyiron_atomistics import Project
-import pyiron_potentialfit
-from itertools import combinations
+from itertools import combinations_with_replacement
 
-def get_superset(list_symbols, unique=True):
+def get_superset(list_symbols, alloy_order=2, cumulative=True):
     superset = []
-    for r in range(len(list_symbols) + 1):
-        for combo in combinations(list_symbols, r):
-            if len(list(combo))>0:
-                superset.append(list(combo))
-    if unique==True:
-        seen = set()
-        superset = [sublist for sublist in superset if tuple(sublist) not in seen and (seen.add(tuple(sublist)) or True)]
-        return superset
+    if cumulative:
+        order_range = range(1, alloy_order + 1)
     else:
-        return superset
+        order_range = [alloy_order]
+    for r in order_range:
+        for combo in combinations_with_replacement(list_symbols, r):
+            superset.append(list(combo))
+    return superset
 
-def reorder_by_master(subset, master_order):
-    return sorted(subset, key=lambda x: master_order.index(x))
+def filter_df(df, atomic_symbols, alloy_order, cumulative=True):
+    if alloy_order < len(atomic_symbols):
+        raise ValueError(f"alloy_order ({alloy_order}) must be greater than or equal to the "
+                         f"number of atomic symbols provided ({len(atomic_symbols)}).")
 
-def filter_df(df, atomic_symbols, master_order=None, cumulative_atoms = True):
-    if master_order!=None:
-        atomic_symbols = reorder_by_master(atomic_symbols, master_order)
-        # print(atomic_symbols)
+    superset_atomic_symbols = get_superset(atomic_symbols, alloy_order=alloy_order, cumulative=cumulative)
 
-    filtered_df = pd.DataFrame()
+    dfs = []
+    for subset_atomic_symbols in superset_atomic_symbols:
+        current_df = df[df['atoms'].apply(lambda x: x.get_chemical_symbols() == subset_atomic_symbols)]
+        if not current_df.empty:
+            dfs.append(current_df)
+    filtered_df = pd.concat(dfs) if dfs else pd.DataFrame()
 
-    if cumulative_atoms==True:
-        superset_atomic_symbols = get_superset(atomic_symbols, unique=True)
-        for subset_atomic_symbols in superset_atomic_symbols:
-            current_df = df[df['atoms'].apply(lambda x: x.get_chemical_symbols() == subset_atomic_symbols)]
-            filtered_df = pd.concat([filtered_df, current_df])
-    else:
-        filtered_df = df[df['atoms'].apply(lambda x: x.get_chemical_symbols() == atomic_symbols)]
-    
     return filtered_df
+
+def pyiron_table_db_filter(status="finished", hamilton="Pacemaker2022"):
+    return lambda j: (j.status == status) & (j.hamilton == hamilton)
+
+def pyiron_table_add_columns(table, column_list):
+    for col in column_list:
+        if col == "training_ratio":
+            table.add[col] = lambda job: job.project_hdf5['user/hyperparameters']['training_ratio']
+        elif col == "cutoff_radius":
+            table.add[col] = lambda job: job.project_hdf5['user/hyperparameters']['cut_rad']
+        elif col == "nradmax_by_orders":
+            table.add[col] = lambda job: job.project_hdf5['user/hyperparameters']['nradmax_by_orders']
+        elif col == "lmax_by_orders":
+            table.add[col] = lambda job: job.project_hdf5['user/hyperparameters']['lmax_by_orders']
+        elif col == "loss":
+            table.add[col] = lambda job: job.project_hdf5['output/log/loss'][-1]
+        elif col == "rmse_epa":
+            table.add[col] = lambda job: job.project_hdf5['output/log/rmse_epa'][-1]
+        elif col == "rmse_f_comp":
+            table.add[col] = lambda job: job.project_hdf5['output/log/rmse_f_comp'][-1]
+        elif col == "compute_time":
+            table.add[col] = lambda job: job.database_entry.totalcputime * job.project_hdf5['server']['cores']
+        elif col == "hashed_key":
+            table.add[col] = lambda job: job.project_hdf5['user/hashed_key']
+        else:
+            raise ValueError(f"Column {col} is not supported in add_columns_to_table.")

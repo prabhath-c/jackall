@@ -1,12 +1,7 @@
 import hashlib
 import json
-import pandas as pd
-import matplotlib.pyplot as plt
 from pyiron_atomistics import Project
 import pyiron_potentialfit
-from itertools import combinations
-
-from jackall import filtering
 
 weighting_params_dict = {
         ## weights for the structures energies/forces are associated according to the distance to E_min:
@@ -34,21 +29,13 @@ weighting_params_dict = {
         "seed": 6169
 }
 
-def setup_job(project, df_All, atomic_symbols, master_order, hashed_key, 
-              hyperparameters={'training_ratio':0.7, 
-                               'cut_rad':7.0, 
-                               'nradmax_by_orders':[15, 3, 2, 1], 
-                               'lmax_by_orders':[0, 3, 2, 1]},
-              cumulative_atoms=True):
+def setup_job(project, filtered_df, atomic_symbols, alloy_order, hashed_key, hyperparameters, cumulative=True):
     
-    # Unpack dictionary for ease
+    # Unpack dictionary
     training_ratio = hyperparameters['training_ratio']
     cut_rad = hyperparameters['cut_rad']
     nradmax_by_orders = hyperparameters['nradmax_by_orders']
     lmax_by_orders = hyperparameters['lmax_by_orders']
-    
-    # Filter data as required
-    filtered_df = filtering.filter_df(df_All, atomic_symbols, master_order, cumulative_atoms)
     
     # Create training and testing set
     training_set = filtered_df.sample(frac=training_ratio, random_state=6919)
@@ -58,7 +45,6 @@ def setup_job(project, df_All, atomic_symbols, master_order, hashed_key,
     training_container = project.create.job.TrainingContainer(f"TrainingContainer_{hashed_key}")
     training_container.include_dataset(training_set)
     training_container.run()
-
     testing_container = project.create.job.TrainingContainer(f"TestingContainer_{hashed_key}")
     testing_container.include_dataset(testing_set)
     testing_container.run()
@@ -74,8 +60,9 @@ def setup_job(project, df_All, atomic_symbols, master_order, hashed_key,
     job.project_hdf5['user/hyperparameters'] = hyperparameters
     job.project_hdf5['user/hashed_key'] = hashed_key
     job.project_hdf5['user/atoms_filter'] = {'atomic_symbols':atomic_symbols,
-                                            'cumulative':cumulative_atoms}
-                     
+                                             'alloy_order': alloy_order,
+                                             'cumulative':cumulative}
+
     job.add_training_data(training_container)
     job.add_testing_data(testing_container)
 
