@@ -47,6 +47,12 @@ def pyiron_table_add_columns(table, column_list):
             table.add[col] = lambda job: job.project_hdf5['output/log/rmse_epa'][-1]
         elif col == "rmse_f_comp":
             table.add[col] = lambda job: job.project_hdf5['output/log/rmse_f_comp'][-1]
+        elif col == "loss_test":
+            table.add[col] = lambda job: job.project_hdf5['output/log_test/loss'][-1]
+        elif col == "rmse_epa_test":
+            table.add[col] = lambda job: job.project_hdf5['output/log_test/rmse_epa'][-1]
+        elif col == "rmse_f_comp_test":
+            table.add[col] = lambda job: job.project_hdf5['output/log_test/rmse_f_comp'][-1] 
         elif col == "compute_time":
             table.add[col] = lambda job: job.database_entry.totalcputime * job.project_hdf5['server']['cores']
         elif col == "hashed_key":
