@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+import re
 from itertools import combinations_with_replacement
 
 def get_superset(list_symbols, alloy_order=2, cumulative=True):
@@ -28,11 +30,33 @@ def filter_df(df, atomic_symbols, alloy_order, cumulative=True):
 
     return filtered_df
 
+def get_total_compute_time(pr, job):
+    hashed_key = job.project_hdf5['user/hashed_key']
+    lammps_job = pr.load(f"Time_test_{hashed_key}")
+    for l in lammps_job.files["log.lammps"].list():
+        if "Loop time" in l:
+            match = re.search(r"Loop time of ([\d\.eE+-]+) on (\d+) procs for (\d+) steps with (\d+) atoms", l)
+            if match:
+                wall_time = float(match.group(1))
+                n_procs = int(match.group(2))
+                n_steps = int(match.group(3))
+                n_atoms = int(match.group(4))
+                
+                if(n_steps > 0):
+                    per_atom_step_time = (wall_time * n_procs) / (n_atoms * n_steps)
+                    print(f"Wall time per atom per step: {per_atom_step_time:.2e} s/atom/step")
+            else:
+                print("No match found.")
+                    
+    return per_atom_step_time or None
+
 def pyiron_table_db_filter(status="finished", hamilton="Pacemaker2022"):
     return lambda j: (j.status == status) & (j.hamilton == hamilton)
 
-def pyiron_table_add_columns(table, column_list):
+def pyiron_table_add_columns(project, table, column_list):
     for col in column_list:
+
+        # For PacemakerJob jobs
         if col == "training_ratio":
             table.add[col] = lambda job: job.project_hdf5['user/hyperparameters']['training_ratio']
         elif col == "cutoff_radius":
@@ -53,9 +77,20 @@ def pyiron_table_add_columns(table, column_list):
             table.add[col] = lambda job: job.project_hdf5['output/log_test/rmse_epa'][-1]
         elif col == "rmse_f_comp_test":
             table.add[col] = lambda job: job.project_hdf5['output/log_test/rmse_f_comp'][-1] 
-        elif col == "compute_time":
+        elif col == "approx_compute_time":
             table.add[col] = lambda job: job.database_entry.totalcputime * job.project_hdf5['server']['cores']
+        elif col == "total_compute_time":
+            table.add[col] = lambda job: get_total_compute_time(project, job)
         elif col == "hashed_key":
             table.add[col] = lambda job: job.project_hdf5['user/hashed_key']
+
+        # For Murnaghan jobs
+        elif col == "lattice_parameter":
+            table.add[col] = lambda job: job.project_hdf5['output/equilibrium_volume'] ** (1/3)
+        elif col == "equilibrium_volume":
+            table.add[col] = lambda job: job.project_hdf5['output/equilibrium_volume']
+        elif col == "equilibrium_bulk_modulus":
+            table.add[col] = lambda job: job.project_hdf5['output/equilibrium_bulk_modulus']
+
         else:
             raise ValueError(f"Column {col} is not supported in add_columns_to_table.")

@@ -29,17 +29,17 @@ def get_pareto_front(df, column_headers):
     return pareto_df
 
 def plot_from_table(df, column_headers, axis_labels=['X', 'Y'],
-                    marker_color='lightgreen', draw_pareto=False, print_pareto=False):
+                    marker_color='blue', draw_pareto=False, print_pareto=False):
     
     fig, ax = plt.subplots()
-    ax.scatter(df[column_headers[0]], df[column_headers[1]], c=marker_color, s=10)
+    ax.scatter(df[column_headers[0]]*1000, df[column_headers[1]], c=marker_color, s=15)
     ax.set_xlabel(axis_labels[0])
     ax.set_ylabel(axis_labels[1])
     
     if draw_pareto==True:
         column_headers.append('hashed_key')
         pareto_df = get_pareto_front(df[column_headers], column_headers)
-        ax.plot(pareto_df[column_headers[0]], pareto_df[column_headers[1]], c='red', marker='^', markersize=5, linewidth=0.5)
+        ax.plot(pareto_df[column_headers[0]]*1000, pareto_df[column_headers[1]], c='red', marker='^', markersize=6, linewidth=1, linestyle='dashed')
 
         if  print_pareto==True:
             print("Pareto points:")
