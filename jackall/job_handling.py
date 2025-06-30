@@ -1,6 +1,7 @@
 def run_slurm(job, queue_name='cmti', num_cores=20, run_time=None, para_mode=None, mpi_proc=None, run=False):
     job.server.queue = queue_name
     job.server.cores = num_cores
+
     if run_time!=None: job.server.run_time = run_time
 
     if para_mode!=None:
@@ -12,3 +13,12 @@ def run_slurm(job, queue_name='cmti', num_cores=20, run_time=None, para_mode=Non
         job.run()
 
     return job
+
+def run_jobs_from_dataframe(df, job_column_name='job', submit=True, slurm_details={}):
+    for _, row in df.iterrows():
+        job = row[job_column_name]
+
+        if submit==True:
+            run_slurm(job, **slurm_details)
+        elif submit==False:
+            job.run()

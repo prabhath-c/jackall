@@ -3,23 +3,34 @@ import numpy as np
 import re
 from itertools import combinations_with_replacement
 
-def get_superset(list_symbols, alloy_order=2, cumulative=True):
+def get_superset(atoms_filter):
+
+    atomic_symbols = atoms_filter['atomic_symbols']
+    alloy_order = atoms_filter['alloy_order']
+    cumulative = atoms_filter['cumulative']
+
     superset = []
+
     if cumulative:
         order_range = range(1, alloy_order + 1)
     else:
         order_range = [alloy_order]
     for r in order_range:
-        for combo in combinations_with_replacement(list_symbols, r):
+        for combo in combinations_with_replacement(atomic_symbols, r):
             superset.append(list(combo))
     return superset
 
-def filter_df(df, atomic_symbols, alloy_order, cumulative=True):
+def filter_df(df, atoms_filter):
+
+    atomic_symbols = atoms_filter['atomic_symbols']
+    alloy_order = atoms_filter['alloy_order']
+    cumulative = atoms_filter['cumulative']
+
     if alloy_order < len(atomic_symbols):
         raise ValueError(f"alloy_order ({alloy_order}) must be greater than or equal to the "
                          f"number of atomic symbols provided ({len(atomic_symbols)}).")
 
-    superset_atomic_symbols = get_superset(atomic_symbols, alloy_order=alloy_order, cumulative=cumulative)
+    superset_atomic_symbols = get_superset(atoms_filter=atoms_filter)
 
     dfs = []
     for subset_atomic_symbols in superset_atomic_symbols:
@@ -94,3 +105,5 @@ def pyiron_table_add_columns(project, table, column_list):
 
         else:
             raise ValueError(f"Column {col} is not supported in add_columns_to_table.")
+
+# def slice_job_table(pr,):

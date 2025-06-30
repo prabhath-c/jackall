@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import pandas as pd
+from . import job_handling
 
 def get_pareto_front(df, column_headers):
     sorted_df = df.sort_values(by=column_headers[0], ascending=True).reset_index(drop=True)
@@ -32,14 +33,14 @@ def plot_from_table(df, column_headers, axis_labels=['X', 'Y'],
                     marker_color='blue', draw_pareto=False, print_pareto=False):
     
     fig, ax = plt.subplots()
-    ax.scatter(df[column_headers[0]]*1000, df[column_headers[1]], c=marker_color, s=15)
+    ax.scatter(df[column_headers[0]], df[column_headers[1]], c=marker_color, s=15)
     ax.set_xlabel(axis_labels[0])
     ax.set_ylabel(axis_labels[1])
     
     if draw_pareto==True:
         column_headers.append('hashed_key')
         pareto_df = get_pareto_front(df[column_headers], column_headers)
-        ax.plot(pareto_df[column_headers[0]]*1000, pareto_df[column_headers[1]], c='red', marker='^', markersize=6, linewidth=1, linestyle='dashed')
+        ax.plot(pareto_df[column_headers[0]], pareto_df[column_headers[1]], c='red', marker='^', markersize=6, linewidth=1, linestyle='dashed')
 
         if  print_pareto==True:
             print("Pareto points:")
@@ -56,3 +57,33 @@ def plot_from_table(df, column_headers, axis_labels=['X', 'Y'],
         return fig, ax, final_pareto_df
     else:
         return fig, ax
+    
+def setup_lammps_test(pr, structure):
+
+    jobs = []
+
+    for idx, row in pr.job_table().iterrows():
+        if(row['hamilton']=='Pacemaker2022'):
+
+            hashed_key = row['job'].split('_')[1]
+            structure = pr.create.structure.bulk('Al', 'fcc', cubic=True).repeat((5,5,5)) # 500 atoms
+            # n_atoms = len(structure)
+
+            temp_job = pr.create.job.Lammps(f"Time_test_{hashed_key}")
+            temp_job.structure = structure
+            temp_job.potential = pr.load(row['id']).get_lammps_potential()
+            temp_job.executable.version = '2024.02.07'
+            temp_job.project_hdf5['user/hashed_key'] = hashed_key
+
+            temp_job.calc_md(temperature=800,
+                            n_ionic_steps=5000,
+                            pressure=0            
+            )
+
+            temp_job.input.control
+
+            jobs.append(temp_job)
+
+    jobs_df = pd.DataFrame({'job': jobs})
+
+    return jobs_df
