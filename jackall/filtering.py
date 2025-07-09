@@ -34,7 +34,8 @@ def filter_df(df, atoms_filter):
 
     dfs = []
     for subset_atomic_symbols in superset_atomic_symbols:
-        current_df = df[df['atoms'].apply(lambda x: x.get_chemical_symbols() == subset_atomic_symbols)]
+        # current_df = df[df['atoms'].apply(lambda x: x.get_chemical_symbols() == subset_atomic_symbols)]
+        current_df = df[df['atoms'].apply(lambda x: sorted(x.get_chemical_symbols()) == sorted(subset_atomic_symbols))]
         if not current_df.empty:
             dfs.append(current_df)
     filtered_df = pd.concat(dfs) if dfs else pd.DataFrame()

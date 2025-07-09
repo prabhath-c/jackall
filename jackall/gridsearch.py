@@ -108,8 +108,12 @@ def setup_job(project, hyperparams_dict, dataset_df, testing_set, testing_contai
     job = project.create.job.PacemakerJob(job_name)
 
     job.cutoff = cut_rad
-    job.input["potential"]["functions"] = {'ALL': {'nradmax_by_orders': nradmax_by_orders, 'lmax_by_orders': lmax_by_orders}}
+    job.input["potential"]["functions"] = {
+        'number_of_functions_per_element': 1000,
+        'ALL': {'nradmax_by_orders': nradmax_by_orders, 'lmax_by_orders': lmax_by_orders}
+        }
     job.input["fit"]['weighting'] = weighting_params_dict
+    job.input['backend']['batch_size'] = 1000
 
     hyperparams_dict_copy = copy.deepcopy(hyperparams_dict)
     hyperparams_dict_copy.pop('hashed_key')
@@ -117,8 +121,11 @@ def setup_job(project, hyperparams_dict, dataset_df, testing_set, testing_contai
     job.project_hdf5['user/hashed_key'] = hashed_key
     job.project_hdf5['user/atoms_filter'] = atoms_filter
 
-    job.add_training_data(training_container)
-    job.add_testing_data(testing_container)
+    try:
+        job.add_training_data(training_container)
+        job.add_testing_data(testing_container)
+    except:
+        return job
 
     return job
 

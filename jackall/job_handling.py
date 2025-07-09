@@ -9,7 +9,7 @@ def run_slurm(job, queue_name='cmti', num_cores=20, run_time=None, para_mode=Non
         if mpi_proc!=None:
             job.server.mpi_proc = mpi_proc
 
-    if run==True: 
+    if run==True:
         job.run()
 
     return job
@@ -19,6 +19,9 @@ def run_jobs_from_dataframe(df, job_column_name='job', submit=True, slurm_detail
         job = row[job_column_name]
 
         if submit==True:
-            run_slurm(job, **slurm_details)
+            try:
+                run_slurm(job, **slurm_details)
+            except:
+                None
         elif submit==False:
             job.run()
