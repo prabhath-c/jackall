@@ -80,6 +80,8 @@ def generate_random_binary_structures(
         base_structure,
         main_element='Al',
         mixing_element='Mg',
+        phase_type='fcc',
+        reference_phase='solid',
         concentrations=[0, 0.5, 1],
         seed=None):
     """
@@ -131,10 +133,86 @@ def generate_random_binary_structures(
             'fractions' : get_element_fractions(atoms),
             'c' : get_element_fractions(atoms, element=mixing_element)[mixing_element],
             'c_in' : target_conc,
-            'atoms' : atoms
+            'atoms' : atoms,
+            'phase_type' : phase_type,
+            'reference_phase' : reference_phase
         }
         rows.append(row)
 
     structures_df = pd.DataFrame(rows)
 
     return structures_df
+
+def phase_list_from_landau(pr, name_tags, phases_list=[], concentrations='All', conc_range=None,  sort_by_conc=True):
+
+    import landau.phases as ldp        
+
+    for idx, row in pr.job_table().iterrows():
+        if(row['hamilton']=='Calphy') and all(tag in row['job'] for tag in name_tags):
+            temp_job = pr.load(row['job'])
+            c = temp_job.project_hdf5['user/input_data']['c']
+            c_in = temp_job.project_hdf5['user/input_data']['c_in']
+            
+            if concentrations == 'All':
+                                
+                temp_phase = ldp.TemperatureDependentLinePhase(
+                    f"AMg_fcc_{c_in}_sol", 
+                    fixed_concentration=c, 
+                    temperatures=temp_job.output.temperature,
+                    free_energies=temp_job.output.energy_free)
+                
+                phases_list.append(temp_phase)
+            else:
+                if c_in <=0.27 or c_in in [0.0, 1.0]:
+
+                    print(c, c_in)
+
+
+    return phases_list
+def get_phase_list(pr, name_tags, phases_list=[], concentrations='All', conc_range=None,  sort_by_conc=True):
+
+    import landau.phases as ldp
+
+    for idx, row in pr.job_table().iterrows():
+        if(row['hamilton']=='Calphy') and all(tag in row['job'] for tag in name_tags):
+            temp_job = pr.load(row['job'])
+            j_name = temp_job.name
+            c = temp_job.project_hdf5['user/input_data']['c']
+            c_in = temp_job.project_hdf5['user/input_data']['c_in']
+            temperatures = temp_job.output.temperature
+            free_energies = temp_job.output.energy_free
+            
+            if concentrations == 'All':
+                print(f'Adding {j_name}')
+                temp_phase = ldp.TemperatureDependentLinePhase(
+                    j_name, 
+                    fixed_concentration=c, 
+                    temperatures=temperatures,
+                    free_energies=free_energies)
+                
+            #     
+            # else:
+            #     if conc_range is not None:
+            #         if not (conc_range[0] <= c_in <= conc_range[1]):
+            #             if isinstance(concentrations, list):
+            #                 if c_in in concentrations:
+            #                     temp_phase = ldp.TemperatureDependentLinePhase(
+            #                         f"AMg_fcc_{c_in}_sol", 
+            #                         fixed_concentration=c, 
+            #                         temperatures=temp_job.output.temperature,
+            #                         free_energies=temp_job.output.energy_free)
+                                
+            #                     phases_list.append(temp_phase)
+            #     elif isinstance(concentrations, list):
+            #         if c_in in concentrations:
+            #             temp_phase = ldp.TemperatureDependentLinePhase(
+            #                 f"AMg_fcc_{c_in}_sol", 
+            #                 fixed_concentration=c, 
+            #                 temperatures=temp_job.output.temperature,
+            #                 free_energies=temp_job.output.energy_free)
+                        
+            #             phases_list.append(temp_phase)
+
+            phases_list.append(temp_phase)
+
+    return phases_list

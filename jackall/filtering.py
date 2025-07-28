@@ -77,6 +77,10 @@ def pyiron_table_add_columns(project, table, column_list):
             table.add[col] = lambda job: job.project_hdf5['user/hyperparameters']['nradmax_by_orders']
         elif col == "lmax_by_orders":
             table.add[col] = lambda job: job.project_hdf5['user/hyperparameters']['lmax_by_orders']
+        elif col == "nfuncs":
+            table.add[col] = lambda job: job.project_hdf5['output']['log']['nfuncs'][0]
+        elif col == "nfuncs_per_element":
+            table.add[col] = lambda job: job.project_hdf5['output']['log']['nfuncs'][0]/len(np.unique(job.project_hdf5['output']['testing_data/element_arrays/symbols']))
         elif col == "loss":
             table.add[col] = lambda job: job.project_hdf5['output/log/loss'][-1]
         elif col == "rmse_epa":
