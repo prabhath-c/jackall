@@ -1,5 +1,6 @@
-from . import job_handling
+from .. import job_handling
 import numpy as np
+import matplotlib.pyplot as plt
 
 def submit_calphy_job(new_job_name, project, row, calphy_params, potential, delete_existing_job=False, slurm_params=None):
 
@@ -19,8 +20,13 @@ def submit_calphy_job(new_job_name, project, row, calphy_params, potential, dele
 
     job.potential = potential
     job.input.equilibration_control = calphy_params['equilibration_control']
+    
+    temperature=calphy_params['temp_range'][row['reference_phase']]
+    print(temperature)
+    print(type(temperature))
+
     job.calc_free_energy(
-        temperature=calphy_params['temp_range'][row['reference_phase']], 
+        temperature=temperature,
         pressure=0,
         reference_phase=row['reference_phase'],
         n_equilibration_steps=calphy_params['n_equilibration_steps'],
@@ -46,6 +52,9 @@ def get_current_t_range(project, name_prefix, reference_phase):
     elif reference_phase == 'liquid':
         final_temps = np.max(temps_array, axis=0)
 
+    # if isinstance(final_temps, np.)
+    print(type(final_temps))
+
     return final_temps
 
 def check_calphy_phase_transition_criterion(job, reference_phase, e_diff_criterion = [0.01, 0.01]):
@@ -62,7 +71,7 @@ def check_calphy_phase_transition_criterion(job, reference_phase, e_diff_criteri
 
     return False
 
-def check_and_resubmit_calphy(project, structures_df, potential, calphy_params, slurm_params=None):
+def check_and_resubmit_calphy(project, structures_df, potential, calphy_params, slurm_params=None, conc_decimals=4):
 
     from copy import deepcopy
     calphy_params = deepcopy(calphy_params)
@@ -71,7 +80,7 @@ def check_and_resubmit_calphy(project, structures_df, potential, calphy_params, 
         elements_str = struct_row['main_element'] + struct_row['mixing_element']
         phase_type = struct_row['phase_type']
         reference_phase = struct_row['reference_phase']
-        concentration = f"{struct_row['c_in']:.2f}".replace('.', 'd')
+        concentration = f"{struct_row['c_in']:.{conc_decimals}f}".replace('.', 'd')
         name_prefix = f"{elements_str}_{phase_type}_{reference_phase}_{concentration}"
 
         current_t_range = get_current_t_range(project, name_prefix, reference_phase)
@@ -121,3 +130,27 @@ def check_and_resubmit_calphy(project, structures_df, potential, calphy_params, 
             current_job_name = f"{name_prefix}_{current_t_range[0]}_{current_t_range[1]}"
             submit_calphy_job(current_job_name, project, struct_row, calphy_params, potential, slurm_params=slurm_params)
             print(f"Submitting job {current_job_name} with temperature range: {current_t_range} for the first time.\n")
+
+def check_calphy_reversible_scaling(project, job_name, fig=None, ax=None, colors_list=None):
+    test = project.load(job_name)
+    test_for = np.array(test.output.ts.forward.energy_diff).T
+    test_back = np.array(test.output.ts.backward.energy_diff).T
+
+    if ax == None:
+        fig, ax = plt.subplots()
+
+    if colors_list != None:
+        ax.plot(test_for, label='Forward', color=colors_list[0])
+        ax.plot(test_back[::-1], label='Backward', color=colors_list[1])
+    else:
+        ax.plot(test_for, label='Forward')
+        ax.plot(test_back[::-1], label='Backward')
+
+    ax.set_xlabel("Timesteps")
+    ax.set_ylabel("Energy difference [eV/atom]")
+    ax.set_title(f"Reversible scaling check for job\n {test.name}")
+    
+    # plt.legend()
+    # plt.show()
+
+    return fig, ax

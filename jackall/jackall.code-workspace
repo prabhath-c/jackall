@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"name": "pchilaka",
+			"path": "../../../.."
+		}
+	],
+	"settings": {
+		"jupyter.allowUnauthorizedRemoteConnection": true,
+		"python.defaultInterpreterPath": "/cmmc/ptmp/pyironhb/pyiron_latest_env/bin/python",
+		"python.analysis.extraPaths": [
+			"./1_Work/Packages/jackall"
+		]
+	}
+}

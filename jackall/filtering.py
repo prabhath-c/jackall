@@ -24,7 +24,6 @@ def filter_df(df, atoms_filter):
 
     atomic_symbols = atoms_filter['atomic_symbols']
     alloy_order = atoms_filter['alloy_order']
-    cumulative = atoms_filter['cumulative']
 
     if alloy_order < len(atomic_symbols):
         raise ValueError(f"alloy_order ({alloy_order}) must be greater than or equal to the "
@@ -34,7 +33,6 @@ def filter_df(df, atoms_filter):
 
     dfs = []
     for subset_atomic_symbols in superset_atomic_symbols:
-        # current_df = df[df['atoms'].apply(lambda x: x.get_chemical_symbols() == subset_atomic_symbols)]
         current_df = df[df['atoms'].apply(lambda x: sorted(x.get_chemical_symbols()) == sorted(subset_atomic_symbols))]
         if not current_df.empty:
             dfs.append(current_df)
@@ -62,8 +60,23 @@ def get_total_compute_time(pr, job):
                     
     return per_atom_step_time or None
 
-def pyiron_table_db_filter(status="finished", hamilton="Pacemaker2022"):
-    return lambda j: (j.status == status) & (j.hamilton == hamilton)
+def pyiron_table_db_filter(job_name_string=None, **kwargs):
+    def filter_func(job_table):
+        mask = pd.Series(True, index=job_table.index)
+
+        if job_name_string is not None:
+            mask &= job_table['job'].str.contains(job_name_string, case=False, na=False)
+
+        for col, val in kwargs.items():
+            if col not in job_table.columns:
+                raise KeyError(f"Column '{col}' not found in job_table")
+            if isinstance(val, (list, tuple, set)):
+                mask &= job_table[col].isin(val)
+            else:
+                mask &= (job_table[col] == val)
+
+        return mask
+    return filter_func
 
 def pyiron_table_add_columns(project, table, column_list):
     for col in column_list:
@@ -108,6 +121,19 @@ def pyiron_table_add_columns(project, table, column_list):
         elif col == "equilibrium_bulk_modulus":
             table.add[col] = lambda job: job.project_hdf5['output/equilibrium_bulk_modulus']
 
+        # For Approx. Melting Point Lammps jobs
+        elif col == "potential_energy":
+            table.add[col] = lambda job: job.project_hdf5['output/generic']['energy_pot'][-1]
+        elif col == "temperature":
+            table.add[col] = lambda job: job.project_hdf5['output/generic']['temperature'][-1]
+        elif col == "volume":
+            table.add[col] = lambda job: job.project_hdf5['output/generic']['volume'][-1]
+        elif col == "volume_per_atom":
+            table.add[col] = lambda job: job.project_hdf5['output/generic']['volume'][-1]/(job.project_hdf5['output/generic']['natoms'][-1])
+        elif col == "temperature_in":
+            table.add[col] = lambda job: job.project_hdf5['user/temperature']
+        elif col == "concentration_in":
+            table.add[col] = lambda job: job.project_hdf5['user/concentration']
         else:
             raise ValueError(f"Column {col} is not supported in add_columns_to_table.")
 

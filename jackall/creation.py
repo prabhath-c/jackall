@@ -83,6 +83,7 @@ def generate_random_binary_structures(
         phase_type='fcc',
         reference_phase='solid',
         concentrations=[0, 0.5, 1],
+        approximations=['antisites'],
         seed=None):
     """
     Adjusts the concentration of mixing_element to desired values by substitution.
@@ -93,7 +94,10 @@ def generate_random_binary_structures(
     structures = []
     rows = []
 
-    for target_conc in concentrations:
+    if 'reshuffle' in approximations and 'antisites' not in approximations:
+        approximations.append('antisites')
+
+    for i, target_conc in enumerate(concentrations):
         atoms = base_structure.copy()
         symbols_orig = np.array(atoms.get_chemical_symbols(), dtype=object)
 
@@ -106,20 +110,40 @@ def generate_random_binary_structures(
         main_indices = np.where(symbols_orig == main_element)[0]
         mix_indices = np.where(symbols_orig == mixing_element)[0]
 
-        if delta_n > 0:
-            # Need to substitute main_element → mixing_element
-            if delta_n > len(main_indices):
-                raise ValueError(f"Cannot reach concentration {target_conc}: not enough {main_element} to replace.")
-            replace_indices = rng.choice(main_indices, size=delta_n, replace=False)
-            symbols_orig[replace_indices] = mixing_element
-        elif delta_n < 0:
-            # Need to substitute mixing_element → main_element
-            delta_n = abs(delta_n)
-            if delta_n > len(mix_indices):
-                raise ValueError(f"Cannot reach concentration {target_conc}: not enough {mixing_element} to replace.")
-            replace_indices = rng.choice(mix_indices, size=delta_n, replace=False)
-            symbols_orig[replace_indices] = main_element
-        # else, already at target composition.
+        if 'antisites' in approximations:
+            if delta_n > 0:
+                # Need to substitute main_element → mixing_element
+                if delta_n > len(main_indices):
+                    raise ValueError(f"Cannot reach concentration {target_conc}: not enough {main_element} to replace.")
+                replace_indices = rng.choice(main_indices, size=delta_n, replace=False)
+                symbols_orig[replace_indices] = mixing_element
+                approx = ['antisites']
+
+            elif delta_n < 0:
+                # Need to substitute mixing_element → main_element
+                delta_n = abs(delta_n)
+                if delta_n > len(mix_indices):
+                    raise ValueError(f"Cannot reach concentration {target_conc}: not enough {mixing_element} to replace.")
+                replace_indices = rng.choice(mix_indices, size=delta_n, replace=False)
+                symbols_orig[replace_indices] = main_element
+                approx = ['antisites']
+            
+            elif delta_n == 0:
+                print("Already at target position")
+                approx = ["stoichiometric"]
+
+        final_seed = seed
+
+        if 'reshuffle' in approximations:
+            if i>0:
+                # Full reshuffle: randomize assignment for target_conc
+                seed_i = (seed if seed is not None else 0) + i
+                rng = np.random.default_rng(seed_i)
+                
+                rng.shuffle(symbols_orig)
+
+                approx = ['reshuffle', 'antisites']
+                final_seed = seed_i
 
         atoms.set_chemical_symbols(symbols_orig.tolist())
         structures.append(atoms)
@@ -135,7 +159,9 @@ def generate_random_binary_structures(
             'c_in' : target_conc,
             'atoms' : atoms,
             'phase_type' : phase_type,
-            'reference_phase' : reference_phase
+            'reference_phase' : reference_phase,
+            'approximations': approx,
+            'seed': final_seed
         }
         rows.append(row)
 
