@@ -1,7 +1,8 @@
+from os import name
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from .calphy_jobs import get_current_t_range
+from .calphy_jobs import concentration_str_variants, get_current_t_range
 import landau.phases as ldp
 from collections.abc import Iterable
 
@@ -18,6 +19,10 @@ def get_phase_change_criterion_table(project, job_name_substr, unique=False):
     for _, row in project.job_table().iterrows():
         if(row['hamilton']=='Calphy'):
             if(job_name_substr in row['job']):
+                if row['status'] in ['submitted', 'running', 'aborted']:
+                    print(f"Job {row['job']} is still {row['status']}. Skipping...")
+                    continue
+                print(f"Processing job {row['job']} with status {row['status']}...")
                 test = project.load(row['job'])
                 test_for = np.array(test.output.ts.forward.energy_diff).T
                 test_back = np.array(test.output.ts.backward.energy_diff).T
@@ -44,7 +49,44 @@ def get_phase_change_criterion_table(project, job_name_substr, unique=False):
 
     return criterion_table
 
-def aggregate_phases_with_landau(project, structures_df, verbose=False):
+def aggregate_phases_with_landau_from_table(project, unique_table, verbose=False):
+    
+    import landau.phases as ldp
+
+    line_phases_list = []
+
+    for idx, phase_row in unique_table.iterrows():
+        name_prefix = phase_row['job']
+        job = project.load(name_prefix)
+        c = job.project_hdf5['user/input_data']['c']
+
+        if job.status in ['submitted', 'running', 'aborted']:
+            if verbose == True:
+                print(f"Job {name_prefix} is {job.status}. Skipping...")
+            continue
+        elif job.status in ['finished']:
+            if verbose == True:
+                print(f"Job {name_prefix} is {job.status}. Processing...")
+            try:
+                temp_line_phase = ldp.TemperatureDependentLinePhase(
+                    name_prefix, 
+                    fixed_concentration=c, 
+                    temperatures=job.output.temperature, 
+                    free_energies=job.output.energy_free
+                )
+                line_phases_list.append(temp_line_phase)
+                if verbose == True:
+                    print(f"Added line phase for {name_prefix} to list.")
+            except Exception as e:
+                print(f"Error processing job {name_prefix}: {e}")
+           
+        else:
+            if verbose == True:
+                print(f"No jobs found for {name_prefix}. Skipping...")
+
+    return line_phases_list
+
+def aggregate_phases_with_landau(project, structures_df, verbose=False, conc_decimals=4):
 
     import landau.phases as ldp
 
@@ -54,12 +96,15 @@ def aggregate_phases_with_landau(project, structures_df, verbose=False):
         elements_str = struct_row['main_element'] + struct_row['mixing_element']
         phase_type = struct_row['phase_type']
         reference_phase = struct_row['reference_phase']
-        concentration = f"{struct_row['c_in']:.4f}".replace('.', 'd')
+        concentration = f"{struct_row['c_in']:.{conc_decimals}f}".replace('.', 'd')
+        concentration_variants = concentration_str_variants(struct_row['c_in'], conc_decimals)
         name_prefix = f"{elements_str}_{phase_type}_{reference_phase}_{concentration}"
+        name_prefix_variants = [f"{elements_str}_{phase_type}_{reference_phase}_{conc_var}" for conc_var in concentration_variants]
 
-        current_t_range = get_current_t_range(project, name_prefix, reference_phase)
+        current_t_range, name_prefix_used = get_current_t_range(project, name_prefix_variants, reference_phase)
 
         if current_t_range is not None:
+            name_prefix = name_prefix_used
             current_job_name = f"{name_prefix}_{current_t_range[0]}_{current_t_range[1]}"
             job = project.load(current_job_name)
             c = job.project_hdf5['user/input_data']['c']
@@ -87,6 +132,30 @@ def aggregate_phases_with_landau(project, structures_df, verbose=False):
                 print(f"No jobs found for {name_prefix}. Skipping...")
     
     return line_phases_list
+
+def filter_line_phase_list_by_concentration(line_phase_list, concentration_query_string):
+    """
+    Filters a list of objects with a 'fixed_concentration' attribute using a query string 
+    (e.g., '<3.5 and >2' or 'fixed_concentration < 3.5 and fixed_concentration > 2').
+    The returned list contains the original objects that match the query.
+    """
+    # Build a DataFrame with at least the attribute and an index
+    df = pd.DataFrame({
+        "fixed_concentration": [obj.fixed_concentration for obj in line_phase_list],
+        "idx": list(range(len(line_phase_list)))
+    })
+
+    # If attribute name is not in the query, let users write queries like "<3.5 and >2"
+    if "fixed_concentration" not in concentration_query_string:
+        query_string = f"fixed_concentration {concentration_query_string}"
+    else:
+        query_string = concentration_query_string
+
+    filtered_df = df.query(query_string)
+    # Get the indices of the passing objects
+    indices = filtered_df["idx"].values
+    # Return filtered objects in their original reference (not a copy)
+    return [line_phase_list[i] for i in indices]
 
 def get_phase_by_name(phases_list, name_str):
     for p in phases_list:
@@ -322,9 +391,12 @@ def plot_diagnostics_f_interpolation(
     max_cols=3,
     per_col_in=3.5,
     per_row_in=4,
-    sharey=False
+    sharey=False,
+    color_override=None,
+    add_errors=True,
+    plot_specific_phase=None
 ):  
-    if axes==None:
+    if axes==None and plot_specific_phase==None:
         n = len(phases_list)
         ncols = min(max_cols, n)
         nrows = int(np.ceil(n / ncols))
@@ -355,6 +427,11 @@ def plot_diagnostics_f_interpolation(
         rmse = np.sqrt(np.mean((y_true - y_pred)**2))
         return mae, rmse
     
+    if plot_specific_phase is not None:
+        phases_list = [get_phase_by_name(phases_list, plot_specific_phase)]
+        fig, axes = plt.subplots(1, 1, figsize=(4, 4), constrained_layout=True)
+        axes=[axes]
+
     for idx, p in enumerate(phases_list):
         x = np.linspace(*p.concentration_range, samples)
 
@@ -362,7 +439,10 @@ def plot_diagnostics_f_interpolation(
 
             free_energy = p.free_energy(T, x) - ((1-x)*f0 + x*f1)
 
-            axes[idx].plot(x, free_energy, label=p.name)
+            if color_override is not None:
+                axes[idx].plot(x, free_energy, color=color_override[p.name], label=p.name)
+            else:
+                axes[idx].plot(x, free_energy, label=p.name)
             
             interpolated_free_energies = []
             line_free_energies = []
@@ -376,23 +456,30 @@ def plot_diagnostics_f_interpolation(
                     line_free_energy -= T * S(c)
                 line_free_energies.append(line_free_energy)
 
-                axes[idx].scatter(c, line_free_energy)
+                if color_override is not None:
+                    axes[idx].scatter(c, line_free_energy, color=color_override[p.name])
+                else:
+                    axes[idx].scatter(c, line_free_energy)
                 axes[idx].set_ylabel("Excess free energy [eV/atom]")
             
             mae, rmse = _get_errors(line_free_energies, interpolated_free_energies)
-            axes[idx].annotate(
-                f"RMSE: {rmse:.2e}\nMAE: {mae:.2e}",
-                xy=(0.65, 0.95),  # 95% along x and y in axes coordinates
-                xycoords='axes fraction',
-                fontsize=11,
-                ha='right',
-                va='top',
-                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
-            )
+            if add_errors:
+                axes[idx].annotate(
+                    f"RMSE: {rmse:.2e}\nMAE: {mae:.2e}",
+                    xy=(0.65, 0.95),  # 95% along x and y in axes coordinates
+                    xycoords='axes fraction',
+                    fontsize=11,
+                    ha='right',
+                    va='top',
+                    bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
+                )
 
         else:
             free_energy = p.free_energy(T, x)
-            axes[idx].plot(x, free_energy, label=p.name)
+            if color_override is not None:
+                axes[idx].plot(x, free_energy, color=color_override[p.name], label=p.name)
+            else:                
+                axes[idx].plot(x, free_energy, label=p.name)
             
             interpolated_free_energies = []
             line_free_energies = []
@@ -406,19 +493,22 @@ def plot_diagnostics_f_interpolation(
                     line_free_energy -= T * S(c)
                 line_free_energies.append(line_free_energy)
                 
-                axes[idx].scatter(c, line_free_energy)
-                axes[idx].set_ylabel("Free energy [eV/atom]")
+                if color_override is not None:
+                    axes[idx].scatter(c, line_free_energy, color=color_override[p.name])
+                else:
+                    axes[idx].scatter(c, line_free_energy)
 
             mae, rmse = _get_errors(line_free_energies, interpolated_free_energies)
-            axes[idx].annotate(
-                f"RMSE: {rmse:.2e}\nMAE: {mae:.2e}",
-                xy=(0.65, 0.95),  # 95% along x and y in axes coordinates
-                xycoords='axes fraction',
-                fontsize=11,
-                ha='right',
-                va='top',
-                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
-            )
+            if add_errors:
+                axes[idx].annotate(
+                    f"RMSE: {rmse:.2e}\nMAE: {mae:.2e}",
+                    xy=(0.65, 0.95),  # 95% along x and y in axes coordinates
+                    xycoords='axes fraction',
+                    fontsize=11,
+                    ha='right',
+                    va='top',
+                    bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
+                )
             
         axes[idx].set_title(p.name)
         axes[idx].set_xlabel('Concentration (c)')
@@ -426,4 +516,4 @@ def plot_diagnostics_f_interpolation(
     plt.tight_layout()
     # plt.show()
 
-    return axes
+    return fig, axes

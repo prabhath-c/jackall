@@ -4,6 +4,7 @@ from ase.data import chemical_symbols, atomic_masses
 from ase.atoms import Atoms
 import os
 import pandas as pd
+from pandas import DataFrame
 from contextlib import contextmanager
 from ruamel.yaml import YAML
 from calphy import Calculation, Solid, Liquid 
@@ -30,7 +31,11 @@ def save_calphy_input_yaml(input_class : Calculation, folder : str):
     with open(f"{folder}/input_file.yaml", "w") as fout:
         yaml.dump(input_data, fout)
 
-def write_structure(structure, potential_df, file_name: str, working_directory: str):
+def write_structure(
+        structure: Atoms, 
+        potential_df: DataFrame, 
+        file_name: str, 
+        working_directory: str):
     """
     Write structure to file
 

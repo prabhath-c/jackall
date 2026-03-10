@@ -1,3 +1,4 @@
+from os import name
 from .. import job_handling
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,6 +21,8 @@ def submit_calphy_job(new_job_name, project, row, calphy_params, potential, dele
 
     job.potential = potential
     job.input.equilibration_control = calphy_params['equilibration_control']
+    if calphy_params['melting_cycle'] == False:
+        job.input.melting_cycle = False
     
     temperature=calphy_params['temp_range'][row['reference_phase']]
     print(temperature)
@@ -41,21 +44,42 @@ def submit_calphy_job(new_job_name, project, row, calphy_params, potential, dele
     elif slurm_params is not None:
         job_handling.run_slurm(job, **slurm_params)
 
-def get_current_t_range(project, name_prefix, reference_phase):
-    filtered_jobs = project.job_table()[project.job_table()['job'].str.startswith(name_prefix)]
-    if filtered_jobs.empty:
-        return None
-    temps_array = [[int(job_name.split('_')[-2]), int(job_name.split('_')[-1])] for job_name in filtered_jobs['job']]
+def get_current_t_range(project, name_prefixes, reference_phase):
+    job_table = project.job_table()
+    for prefix in name_prefixes:
+        matched_jobs = job_table[job_table['job'].str.startswith(prefix+'_')]
+        # print(f"Checking prefix: {prefix}, matched jobs: {len(matched_jobs)}")
+        if not matched_jobs.empty:
+            temps_array = [
+                [int(job_name.split('_')[-2]), int(job_name.split('_')[-1])]
+                for job_name in matched_jobs['job']
+            ]
+            temps_array = np.array(temps_array)
+            if reference_phase == 'solid':
+                final_temps = np.min(temps_array, axis=0)
+            elif reference_phase == 'liquid':
+                final_temps = np.max(temps_array, axis=0)
+            else:
+                raise ValueError(f"Invalid reference_phase: {reference_phase}")
+            return final_temps.tolist(), prefix
+    # If no prefix matches
+    return None, None
 
-    if reference_phase == 'solid':
-        final_temps = np.min(temps_array, axis=0)
-    elif reference_phase == 'liquid':
-        final_temps = np.max(temps_array, axis=0)
+# def get_current_t_range(project, name_prefixes, reference_phase):
+#     filtered_jobs = project.job_table()[project.job_table()['job'].str.startswith(name_prefix)]
+#     if filtered_jobs.empty:
+#         return None
+#     temps_array = [[int(job_name.split('_')[-2]), int(job_name.split('_')[-1])] for job_name in filtered_jobs['job']]
 
-    # if isinstance(final_temps, np.)
-    print(type(final_temps))
+#     if reference_phase == 'solid':
+#         final_temps = np.min(temps_array, axis=0)
+#     elif reference_phase == 'liquid':
+#         final_temps = np.max(temps_array, axis=0)
 
-    return final_temps
+#     # if isinstance(final_temps, np.)
+#     print(type(final_temps))
+
+#     return final_temps
 
 def check_calphy_phase_transition_criterion(job, reference_phase, e_diff_criterion = [0.01, 0.01]):
     print(f"Checking phase transition criterion for job {job.job_name} with reference phase {reference_phase} and energy difference criterion {e_diff_criterion}")
@@ -71,6 +95,31 @@ def check_calphy_phase_transition_criterion(job, reference_phase, e_diff_criteri
 
     return False
 
+def concentration_str_variants(value, conc_decimals):
+    """
+    Format value with the requested decimal digits. 
+    Then, produce all representations by stripping trailing decimal zeros, 
+    but do not remove nonzero digits. Always return at least the full representation.
+    Replace the decimal dot with 'd'.
+    """
+    base_str = f"{value:.{conc_decimals}f}"
+    if '.' in base_str:
+        integer_part, decimal_part = base_str.split('.')
+        variants = [integer_part + 'd' + decimal_part]
+        
+        # Strip only trailing zeros but never remove other digits
+        trimmed = decimal_part
+        while trimmed and trimmed[-1] == '0':
+            trimmed = trimmed[:-1]
+            if trimmed:  # Only if something remains in decimal_part
+                variants.append(integer_part + 'd' + trimmed)
+            else:
+                variants.append(integer_part)
+        return variants
+    else:
+        # It's an int, so just return as is
+        return [base_str.replace('.', 'd')]
+
 def check_and_resubmit_calphy(project, structures_df, potential, calphy_params, slurm_params=None, conc_decimals=4):
 
     from copy import deepcopy
@@ -81,12 +130,17 @@ def check_and_resubmit_calphy(project, structures_df, potential, calphy_params, 
         phase_type = struct_row['phase_type']
         reference_phase = struct_row['reference_phase']
         concentration = f"{struct_row['c_in']:.{conc_decimals}f}".replace('.', 'd')
+        concentration_variants = concentration_str_variants(struct_row['c_in'], conc_decimals)
         name_prefix = f"{elements_str}_{phase_type}_{reference_phase}_{concentration}"
+        name_prefix_variants = [f"{elements_str}_{phase_type}_{reference_phase}_{conc_var}" for conc_var in concentration_variants]
 
-        current_t_range = get_current_t_range(project, name_prefix, reference_phase)
+        current_t_range, name_prefix_used = get_current_t_range(project, name_prefix_variants, reference_phase)
 
+        print('\n--------------------------------')
         if current_t_range is not None:
+            name_prefix = name_prefix_used
             current_job_name = f"{name_prefix}_{current_t_range[0]}_{current_t_range[1]}"
+            # print("Testing job: ", current_job_name, ' ; ', concentration_variants)
             job = project.load(current_job_name)
 
             if job.status in ['submitted', 'running']:
@@ -146,7 +200,7 @@ def check_calphy_reversible_scaling(project, job_name, fig=None, ax=None, colors
         ax.plot(test_for, label='Forward')
         ax.plot(test_back[::-1], label='Backward')
 
-    ax.set_xlabel("Timesteps")
+    ax.set_xlabel("Scaling Steps")
     ax.set_ylabel("Energy difference [eV/atom]")
     ax.set_title(f"Reversible scaling check for job\n {test.name}")
     
